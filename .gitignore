@@ -7,7 +7,7 @@
 dist
 samples-and-tests/*/tmp/
 samples-and-tests/*/modules/
-lib
+lib/*
 
 # IDE and editors
 *~
