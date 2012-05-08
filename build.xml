@@ -19,6 +19,7 @@
     </path>
 
     <target name="build" depends="compile">
+        <mkdir dir="lib" />
         <copy todir="tmp/classes">
             <fileset dir="src">
                 <include name="**/*.properties"/>
