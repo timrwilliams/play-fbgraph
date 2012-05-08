@@ -1,0 +1,233 @@
+h1. Facebook Graph API Support
+
+p(note). The FbGraph module now supports OAuth 2.0 for authentication.
+
+The FbGraph module enables your application to access all the features of the "Facebook Graph API":http://developers.facebook.com/docs/api/ via Java and the "Play framework":http://www.playframework.org/. It uses the "Facebook JavaScript SDK":http://developers.facebook.com/docs/reference/javascript/ to provide simple login and signup.
+
+
+h2. Prerequisites
+
+The FbGraph module requires that you "register your application":http://developers.facebook.com/setup/ with Facebook to get an App ID (or appId) for your site.
+
+
+h2. Installation and Configuration
+
+Start by installing the FbGraph module from the modules repository:
+
+bc. play install fbgraph-{version}
+
+Then, edit the @dependencies.yml@ file to add the module as dependency of your application:
+
+bc. require:
+    - play -> fbgraph {version}:
+        transitive: false
+
+Install the resolved dependencies:
+
+bc. play dependencies
+
+Finally, configure the module by setting these properties in your @application.conf@:
+
+bc. # FbGraph
+# ~~~~~
+fbg.appId={YOUR_APP_ID}
+fbg.appSecret={YOUR_APP_SECRET}
+
+
+h2. Login (JS SDK)
+
+Used in conjunction with the JavaScript SDK, the FbGraph module can share user sessions seamlessly across the client and server. If a user is already logged in to their Facebook account, the JavaScript SDK will pick up the login session and send it to the server via a cookie, which the FbGraph module reads without any intervention on the developer's part.
+
+h3. Fbg Script Tag (for loading the Facebook JavaScript SDK)
+
+The FbGraph module provides a tag for loading the "Facebook JavaScript SDK":http://developers.facebook.com/docs/reference/javascript/. It uses the standard @script@ element, calls @FB.init()@ and specifies a @<div>@ element named @fb-root@ within the document.
+
+First, include the following tag in your page:
+
+bc. #{fbg.scriptAsync /}
+
+h3. Facebook XML Mamespace
+
+Next, add an XML namespace attribute to the root @<html>@ element of your page in order to use the XFBML tags:
+
+bc. <html xmlns="http://www.w3.org/1999/xhtml" xmlns:fb="http://www.facebook.com/2008/fbml">
+
+h3. Facebook Login Button
+
+Then, add the standard "Facebook Login Button":https://developers.facebook.com/docs/reference/plugins/login/ to your page using the @<fb:login-button>@ XFBML element:
+
+bc. <fb:login-button onlogin="facebookLogin();"></fb:login-button>
+
+If you need access to more information, such as the user's birthday or wall, you must request permissions. You can do this by adding the permissions you need to the @scope@ attribute of the @<fb:login-button>@ (e.g. @scope="email,user_birthday,read_stream,publish_stream"@).
+
+*Note:* A full list of permissions is available "here":https://developers.facebook.com/docs/reference/api/permissions/.
+
+h3. JavaScript Function and Controller Action Method
+
+Finally, implements a JavaScript function that will be called if the Facebook login is successful:
+
+bc. <script type="text/javascript">
+    function facebookLogin() {
+        // get current login status from facebook.com
+        FB.getLoginStatus(function(response) {
+            if (response.status === 'connected') {
+                // the user is logged in and connected to your app
+                window.location = "@{Application.facebookLogin()}";
+            } else {
+                window.location = "@{Application.facebookLogout()}";
+            }
+         });
+    }
+</script>
+
+In this example, the application will redirect the browser to the action @/application/facebookLogin@. The URL will invoke the @controllers.Application.facebookLogin()@ action method. In this action, you can do useful things like retrieving an object of the domain class that represents a user (or create one if it doesn't exist) and put the user's name into the session:
+
+bc.. // [...]
+import com.google.gson.JsonObject;
+import play.modules.facebook.FbGraph;
+import play.modules.facebook.FbGraphException;
+import play.modules.facebook.Parameter;
+// [...]
+public class Application extends Controller {
+// [...]
+    public static void index() {
+        render();
+    }
+
+    public static void facebookLogin() {
+        try {
+            JsonObject profile = FbGraph.getObject("me"); // fetch the logged in user
+            String email = profile.get("email").getAsString(); // retrieve the email
+            // do useful things
+            Session.current().put("username", email); // put the email into the session (for the Secure module)
+        } catch (FbGraphException fbge) {
+            flash.error(fbge.getMessage());
+            if (fbge.getType() != null && fbge.getType().equals("OAuthException")) {
+                Session.current().remove("username");
+            }
+        }
+        index();
+    }
+
+    public static void facebookLogout() {
+        Session.current().remove("username");
+        FbGraph.destroySession();
+        index();
+    }
+}
+// [...]
+
+
+h2. API Calls / Examples
+
+h3. Reading
+
+bc.. // Objects
+JsonObject user             = FbGraph.getObject("btaylor");
+JsonObject page             = FbGraph.getObject("cocacola");
+
+// Connections
+JsonArray friends           = FbGraph.getConnection("me/friends");
+JsonArray newsFeed          = FbGraph.getConnection("me/home");
+
+// Selection
+JsonObject fields           = FbGraph.getObject("bgolub", Parameter.with("fields", "id,name,picture").parameters());
+JsonElement ids             = FbGraph.api("", Parameter.with("ids", "arjun,vernal").parameters());
+
+// Picture
+String profilePicUrl        = FbGraph.getPicture("me");
+
+// Paging
+JsonArray filteredLikes     = FbGraph.getConnection("me/likes", Parameter.with("limit", "3").parameters());
+JsonArray filteredSearch    = FbGraph.getConnection("search", Parameter.with("until", "yesterday").and("q", "orange").parameters());
+
+h3. Searching
+
+bc. // Public search
+JsonArray publicPostSearch  = FbGraph.getConnection("search", Parameter.with("q", "watermelon").and("type", "post").parameters());
+JsonArray publicUserSearch  = FbGraph.getConnection("search", Parameter.with("q", "mark").and("type", "user").parameters());
+
+h3. Publishing
+
+bc. JsonElement post            = FbGraph.publish("me/feed", Parameter.with("message", "Hello World!").parameters());
+
+h3. Deleting
+
+bc. Boolean deleted             = FbGraph.delete("OBJECT_ID");
+
+h3. Analytics
+
+bc. JsonArray data              = FbGraph.getConnection("APP_ID/insights");
+
+
+h2. JSON to Java Objects
+
+The FbGraph module provides simple methods to convert JSON to arbitrary Java Objects (including pre-existing objects) using the "Gson library":http://code.google.com/p/google-gson/.
+
+The JSON string returned by Facebook can be mapped to a Java Object like the following:
+
+bc. User user = FbGraph.getObject("btaylor", User.class);
+
+For custom naming policy, you can use the @SerializedName@ annotation on the members of your model class.
+
+bc. public class User {
+    private String id;
+    private String name;
+    @SerializedName("last_name")
+    private String familyName;
+    @SerializedName("first_name")
+    private String givenName;
+    private String gender;
+    private String birthday;
+    private String email;
+    // [...]
+    // Getters and setters
+}
+
+
+h2. RestFB Client Alternative
+
+The module also provides a "RestFB":http://restfb.com/ client that you can invoke like this:
+
+bc. // User login using the RestFB client
+public static void facebookLogin() {
+    com.restfb.FacebookClient fbClient = FbGraph.getFacebookClient();
+    com.restfb.types.User profile = fbClient.fetchObject("me", com.restfb.types.User.class);
+    String email = profile.getEmail();
+    // do useful things
+    Session.current().put("username", email);
+    redirect("/");
+}
+
+
+h2. Fbg Script Tag Options
+
+h3. Loading the SDK
+
+Synchronously:
+
+bc. #{fbg.script /}
+
+Asynchronously (recommended):
+
+bc. #{fbg.scriptAsync /}
+
+h3. Internationalization
+
+bc. #{fbg.script locale: 'fr_CA' /}
+
+*Default:* @en_US@
+
+
+h2. Access Token
+
+An access token enables you (or your application) to access the user's information and take actions on their behalf. FbGraph module retrieves this user access token from the cookie created by the Facebook JS SDK for your App ID. With a valid access token, FbGraph can invoke the Graph API by appending the @access_token@ parameter to the requests.
+
+If you want to specify your own access token, you can do it by passing the token as a parameter of the API call:
+
+bc. JsonObject user = FbGraph.getObject("btaylor", Parameter.with("access_token", "YOUR_ACCESS_TOKEN").parameters());
+
+
+h2. Known Issues
+
+* There's a bug in Play 1.1 with the WSUrlFetch implementation that prevents using the publish feature of FbGraph in conjunction with the GAE module "[see this thread]":http://groups.google.com/group/play-framework/browse_thread/thread/3cb357688ec343f4/d07cbf2f4ac82e7f. The workaround is to use the RestFB client provided with this module.

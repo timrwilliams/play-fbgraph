@@ -1,0 +1,7 @@
+self: play -> fbgraph 0.5
+
+# Application dependencies
+
+require:
+    - play
+    - com.restfb -> restfb 1.6.9
