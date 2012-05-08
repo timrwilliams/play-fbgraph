@@ -128,7 +128,7 @@ public class FbGraph {
             accessToken = (String) Request.current().args.get(FB_GRAPH_TOKEN);
         } else {
             JsonObject fbData = getFacebookData();
- 	    if(fbData.has("oauth_token")){
+ 	    if(fbData!=null && fbData.has("oauth_token")){
             	accessToken=fbData.get("oauth_token").getAsString();
             }		
             else if (fbData != null && fbData.has("code")) {
